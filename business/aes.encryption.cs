@@ -119,8 +119,14 @@ public class AESEncryption
         for (int i = 0; i < 16; i++) output[i] = state[i % 4, i / 4];
         return output;
     }
+}
 
-     public static void EncryptFileManual(string inputPath, string outputPath, byte[] key)
+public class AESFileManual
+{
+    // Giả sử các hàm SubBytes, ShiftRows, MixColumns, AddRoundKey, 
+    // KeyExpansion và Encrypt(byte[] input, byte[] key) đã được định nghĩa ở trên.
+
+    public static void EncryptFileManual(string inputPath, string outputPath, byte[] key)
     {
         byte[] fileBytes = File.ReadAllBytes(inputPath);
         
@@ -141,7 +147,7 @@ public class AESEncryption
             Array.Copy(paddedBytes, i, block, 0, 16);
             
             // Gọi hàm mã hóa "chay" của bạn ở đây
-            byte[] encryptedBlock = Encrypt(block, key); 
+            byte[] encryptedBlock = AESEncryption.Encrypt(block, key); 
             
             Array.Copy(encryptedBlock, 0, encryptedData, i, 16);
         }
@@ -171,4 +177,3 @@ public class AESEncryption
     Console.WriteLine("\n-----------------------");
     }
 }
-

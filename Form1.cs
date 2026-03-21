@@ -3,6 +3,7 @@ using System.IO;
 using System.Drawing;
 using System.Linq.Expressions;
 using System.Windows.Forms;
+using Encryption;
 public partial class Form1 : Form
 {
     private Panel headerPanel;
@@ -129,7 +130,7 @@ public partial class Form1 : Form
                 btnAction.Enabled = false; // Khóa nút để tránh nhấn nhiều lần
 
                 // GỌI HÀM LOGIC CỦA BẠN
-                AESEncryption.EncryptFileManual(input, output, key);
+                AESFileManual.EncryptFileManual(input, output, key);
 
                 lblStatus.Text = "Trạng thái: Mã hóa thành công!";
                 lblStatus.ForeColor = Color.LightGreen;
