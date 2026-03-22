@@ -1,9 +1,12 @@
 namespace CSAT;
+
 using System.IO;
 using System.Drawing;
 using System.Linq.Expressions;
 using System.Windows.Forms;
 using Encryption;
+using Decryption;
+using CSAT.Network.Sender;
 public partial class Form1 : Form
 {
     private Panel headerPanel;
@@ -22,8 +25,40 @@ public partial class Form1 : Form
         this.FormBorderStyle = FormBorderStyle.FixedDialog;
         this.StartPosition = FormStartPosition.CenterScreen;
 
-        InitCustomUI();
+        //InitCustomUI();
+        SetupTabs();
     }
+    private void SetupTabs()
+{
+    TabControl tabControl = new TabControl { Dock = DockStyle.Fill };
+    
+    // --- TAB GỬI FILE ---
+    TabPage tabSend = new TabPage("Gửi File (Client)");
+    Label lblIP = new Label { Text = "IP Máy Nhận:", Top = 20, Left = 20 };
+    TextBox txtIP = new TextBox { Name = "txtIP", Text = "127.0.0.1", Top = 20, Left = 120, Width = 150 };
+    
+    Button btnBrowse = new Button { Text = "Chọn File", Top = 60, Left = 20 };
+    TextBox txtPath = new TextBox { Name = "txtPath", Top = 60, Left = 120, Width = 250, ReadOnly = true };
+    
+    Button btnSend = new Button { Name = "btnSend", Text = "MÃ HÓA & GỬI", Top = 120, Left = 120, Width = 150, Height = 40, BackColor = Color.LightBlue };
+    
+    tabSend.Controls.AddRange(new Control[] { lblIP, txtIP, btnBrowse, txtPath, btnSend });
+
+    // --- TAB NHẬN FILE ---
+    TabPage tabReceive = new TabPage("Nhận File (Server)");
+    Label lblPort = new Label { Text = "Cổng (Port):", Top = 20, Left = 20 };
+    TextBox txtPort = new TextBox { Name = "txtPort", Text = "5000", Top = 20, Left = 120, Width = 80 };
+    
+    Button btnStartServer = new Button { Name = "btnStartServer", Text = "BẬT SERVER", Top = 60, Left = 20, Width = 100 };
+    ListBox lstLog = new ListBox { Name = "lstLog", Top = 100, Left = 20, Width = 350, Height = 150 };
+    
+    tabReceive.Controls.AddRange(new Control[] { lblPort, txtPort, btnStartServer, lstLog });
+
+    // Thêm các tab vào Control chính
+    tabControl.TabPages.Add(tabSend);
+    tabControl.TabPages.Add(tabReceive);
+    this.Controls.Add(tabControl);
+}
 
     private void InitCustomUI()
     {
@@ -104,21 +139,27 @@ public partial class Form1 : Form
         }
     }
 
-    private void InitEvents()
+    private async void InitEvents()
     {
-        btnAction.Click += (s, e) =>
+        btnAction.Click += async (s, e) =>
         {
-            string input = txtPath.Text; // Lấy đường dẫn file từ TextBox
-
+            string ip = "127.0.0.1"; // Ví dụ: 127.0.0.1
+            int port = 5000;
+            //string input = txtPath.Text; // Lấy đường dẫn file từ TextBox
+            string input = "D:\\Documents\\banro_ma.txt";
+            Console.WriteLine("--- Bat dau qua trinh ma hoa ---");
+            Console.WriteLine("Duong dan file: ");
             if (string.IsNullOrEmpty(input) || !File.Exists(input))
             {
                 MessageBox.Show("Vui lòng chọn một file hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-            // Tạo đường dẫn file đầu ra (ví dụ: thêm đuôi .enc)
-            string output = input + ".enc";
+            string directory = Path.GetDirectoryName(input);
+            string fileName = Path.GetFileNameWithoutExtension(input);
+            string extension = Path.GetExtension(input);
 
+            string output = Path.Combine(directory, fileName + "_ma" + extension);
             // Tạo Key (Trong thực tế, bạn nên lấy từ một ô nhập Password rồi Hash nó)
             // Ở đây dùng tạm 16 byte mẫu cho AES-128
             byte[] key = System.Text.Encoding.UTF8.GetBytes("1234567890123456");
@@ -130,11 +171,15 @@ public partial class Form1 : Form
                 btnAction.Enabled = false; // Khóa nút để tránh nhấn nhiều lần
 
                 // GỌI HÀM LOGIC CỦA BẠN
-                AESFileManual.EncryptFileManual(input, output, key);
+                byte[] encryptedData = AESFileManual.EncryptFileManual(input, output, key);
 
                 lblStatus.Text = "Trạng thái: Mã hóa thành công!";
                 lblStatus.ForeColor = Color.LightGreen;
-                MessageBox.Show($"File đã được bảo mật tại:\n{output}", "Thành công");
+                FileSender senderService = new FileSender();
+                await senderService.SendFileAsync(ip, port, input, encryptedData);
+
+                MessageBox.Show("Gửi file thành công rực rỡ!");
+                // MessageBox.Show($"File đã được bảo mật tại:\n{output}", "Thành công");
             }
             catch (Exception ex)
             {

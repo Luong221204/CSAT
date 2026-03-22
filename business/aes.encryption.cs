@@ -1,6 +1,7 @@
 using System;
 namespace Encryption;
 
+using System.Diagnostics;
 public class AESEncryption
 {
     // Bảng S-Box cho SubBytes
@@ -26,20 +27,24 @@ public class AESEncryption
     private static readonly byte[] Rcon = { 0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36 };
 
     // 1. Key Expansion (Đã làm ở bước trước)
-    public static byte[] ExpandKey(byte[] key) {
+    public static byte[] ExpandKey(byte[] key)
+    {
         byte[] expandedKey = new byte[176];
         Array.Copy(key, 0, expandedKey, 0, 16);
         int bytesGenerated = 16;
         int rconIter = 1;
-        while (bytesGenerated < 176) {
+        while (bytesGenerated < 176)
+        {
             byte[] temp = new byte[4];
             for (int i = 0; i < 4; i++) temp[i] = expandedKey[bytesGenerated - 4 + i];
-            if (bytesGenerated % 16 == 0) {
+            if (bytesGenerated % 16 == 0)
+            {
                 byte t = temp[0]; temp[0] = temp[1]; temp[1] = temp[2]; temp[2] = temp[3]; temp[3] = t;
                 for (int i = 0; i < 4; i++) temp[i] = SBox[temp[i]];
                 temp[0] ^= Rcon[rconIter++];
             }
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 4; i++)
+            {
                 expandedKey[bytesGenerated] = (byte)(expandedKey[bytesGenerated - 16] ^ temp[i]);
                 bytesGenerated++;
             }
@@ -48,32 +53,38 @@ public class AESEncryption
     }
 
     // 2. AddRoundKey
-    private static void AddRoundKey(byte[,] state, byte[] expandedKey, int round) {
+    private static void AddRoundKey(byte[,] state, byte[] expandedKey, int round)
+    {
         for (int c = 0; c < 4; c++)
             for (int r = 0; r < 4; r++)
                 state[r, c] ^= expandedKey[round * 16 + c * 4 + r];
     }
 
     // 3. SubBytes
-    private static void SubBytes(byte[,] state) {
+    private static void SubBytes(byte[,] state)
+    {
         for (int r = 0; r < 4; r++)
             for (int c = 0; c < 4; c++)
                 state[r, c] = SBox[state[r, c]];
     }
 
     // 4. ShiftRows
-    private static void ShiftRows(byte[,] state) {
+    private static void ShiftRows(byte[,] state)
+    {
         byte[] temp = new byte[4];
-        for (int r = 1; r < 4; r++) {
+        for (int r = 1; r < 4; r++)
+        {
             for (int c = 0; c < 4; c++) temp[c] = state[r, (c + r) % 4];
             for (int c = 0; c < 4; c++) state[r, c] = temp[c];
         }
     }
 
     // 5. MixColumns (Nhân ma trận trong trường Galois GF(2^8))
-    private static byte GaloMul(byte a, byte b) {
+    private static byte GaloMul(byte a, byte b)
+    {
         byte p = 0;
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 8; i++)
+        {
             if ((b & 1) != 0) p ^= a;
             bool hiBitSet = (a & 0x80) != 0;
             a <<= 1;
@@ -83,8 +94,10 @@ public class AESEncryption
         return p;
     }
 
-    private static void MixColumns(byte[,] state) {
-        for (int c = 0; c < 4; c++) {
+    private static void MixColumns(byte[,] state)
+    {
+        for (int c = 0; c < 4; c++)
+        {
             byte s0 = state[0, c], s1 = state[1, c], s2 = state[2, c], s3 = state[3, c];
             state[0, c] = (byte)(GaloMul(s0, 2) ^ GaloMul(s1, 3) ^ s2 ^ s3);
             state[1, c] = (byte)(s0 ^ GaloMul(s1, 2) ^ GaloMul(s2, 3) ^ s3);
@@ -94,7 +107,8 @@ public class AESEncryption
     }
 
     // HÀM MÃ HÓA TỔNG THỂ
-    public static byte[] Encrypt(byte[] input, byte[] key) {
+    public static byte[] Encrypt(byte[] input, byte[] key)
+    {
         byte[] expandedKey = ExpandKey(key);
         byte[,] state = new byte[4, 4];
         for (int i = 0; i < 16; i++) state[i % 4, i / 4] = input[i];
@@ -103,7 +117,8 @@ public class AESEncryption
         AddRoundKey(state, expandedKey, 0);
 
         // 9 vòng lặp chính
-        for (int round = 1; round < 10; round++) {
+        for (int round = 1; round < 10; round++)
+        {
             SubBytes(state);
             ShiftRows(state);
             MixColumns(state);
@@ -126,14 +141,16 @@ public class AESFileManual
     // Giả sử các hàm SubBytes, ShiftRows, MixColumns, AddRoundKey, 
     // KeyExpansion và Encrypt(byte[] input, byte[] key) đã được định nghĩa ở trên.
 
-    public static void EncryptFileManual(string inputPath, string outputPath, byte[] key)
+    public static byte[] EncryptFileManual(string inputPath, string outputPath, byte[] key)
     {
+        // Đọc file gốc
         byte[] fileBytes = File.ReadAllBytes(inputPath);
-        
+        Console.WriteLine("Nội dung file: " + System.Text.Encoding.UTF8.GetString(fileBytes));
         // 1. Padding (PKCS7): Đưa độ dài file về bội số của 16
         int paddingLength = 16 - (fileBytes.Length % 16);
         byte[] paddedBytes = new byte[fileBytes.Length + paddingLength];
         Array.Copy(fileBytes, paddedBytes, fileBytes.Length);
+
         for (int i = fileBytes.Length; i < paddedBytes.Length; i++)
         {
             paddedBytes[i] = (byte)paddingLength;
@@ -145,35 +162,25 @@ public class AESFileManual
         {
             byte[] block = new byte[16];
             Array.Copy(paddedBytes, i, block, 0, 16);
-            
+            Console.WriteLine("từ mã "+ System.Text.Encoding.UTF8.GetString(block));
+
             // Gọi hàm mã hóa "chay" của bạn ở đây
-            byte[] encryptedBlock = AESEncryption.Encrypt(block, key); 
-            
+            byte[] encryptedBlock = AESEncryption.Encrypt(block, key);
+            Console.WriteLine("ma hoa "+ System.Text.Encoding.UTF8.GetString(encryptedBlock));
+            string hexResult = BitConverter.ToString(encryptedData).Replace("-", " ");
+            Console.WriteLine("Bản mã (HEX): " + hexResult);
+             // 4. In dang Base64 (de truyen di xa neu can)
+            string base64Result = Convert.ToBase64String(encryptedBlock);
+            Console.WriteLine($"Ban ma (Base64): {base64Result}");
             Array.Copy(encryptedBlock, 0, encryptedData, i, 16);
         }
 
         File.WriteAllBytes(outputPath, encryptedData);
         Console.WriteLine("Đã mã hóa xong bằng thuật toán AES tự viết!");
         Console.WriteLine("--- KẾT QUẢ MÃ HÓA ---");
-    Console.WriteLine($"Đường dẫn file đích: {outputPath}");
+        Console.WriteLine($"Đường dẫn file đích: {outputPath}");
+        return encryptedData;
 
-    // 4. In nội dung mã hóa dưới dạng HEX (Chuỗi thập lục phân - Phổ biến trong mật mã học)
-    Console.WriteLine("\nNội dung mã hóa (Dạng HEX):");
-    string hexString = BitConverter.ToString(encryptedData).Replace("-", " ");
-    // Nếu file quá dài, chỉ in 256 byte đầu tiên để tránh tràn màn hình
-    if (hexString.Length > 500) 
-        Console.WriteLine(hexString.Substring(0, 500) + "...");
-    else 
-        Console.WriteLine(hexString);
-
-    // 5. In nội dung mã hóa dưới dạng Base64 (Dùng để truyền tin hoặc lưu database)
-    Console.WriteLine("\nNội dung mã hóa (Dạng Base64):");
-    string base64String = Convert.ToBase64String(encryptedData);
-    if (base64String.Length > 200)
-        Console.WriteLine(base64String.Substring(0, 200) + "...");
-    else
-        Console.WriteLine(base64String);
-
-    Console.WriteLine("\n-----------------------");
+        // Phần code mã hóa phía dưới sẽ không chạy do có lệnh return ở trên
     }
 }
