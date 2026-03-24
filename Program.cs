@@ -9,11 +9,9 @@ static class Program
     /// </summary>
     [STAThread]
 
-      [DllImport("kernel32.dll")]
-    static extern bool AllocConsole();
     static void Main()
     {
-        AllocConsole(); // 👈 thêm dòng này
+       // AllocConsole(); // 👈 thêm dòng này
 
         Console.WriteLine("Hello bro!");
         // To customize application configuration such as set high DPI settings or default font,

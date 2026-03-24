@@ -2,195 +2,536 @@ namespace CSAT;
 
 using System.IO;
 using System.Drawing;
-using System.Linq.Expressions;
 using System.Windows.Forms;
+using System.Security.Cryptography;
+using System.Text;
+using System.Net.Sockets;
+using System.Net;
 using Encryption;
 using Decryption;
-using CSAT.Network.Sender;
 public partial class Form1 : Form
 {
-    private Panel headerPanel;
-    private Label lblTitle;
-    private TextBox txtPath;
-    private Button btnSelect;
-    private Button btnAction;
-    private Label lblStatus;
+    private TabControl tabControl;
+    private TabPage tabClient, tabServer;
+
+    // Controls cho Tab Client
+    private TextBox txtFilePath, txtKey, txtClientLog;
+    private Button btnBrowse, btnEncryptAndSend;
+    private Label lblClientStatus;
+
+    // Controls cho Tab Server
+    private TextBox txtEncryptedReceived, txtDecryptedResult;
+    private Label lblServerStatus;
+    private Button btnStartServer, btnStopServer;
+
+    private TcpListener serverListener;
+    private bool isServerRunning = false;
+    private CancellationTokenSource cancellationTokenSource;
 
     public Form1()
     {
-        // Cấu hình Form chính
-        this.Text = "Két Sắt Dữ Liệu v1.0";
-        this.Size = new Size(500, 350);
-        this.BackColor = Color.FromArgb(30, 30, 30); // Màu nền tối
-        this.FormBorderStyle = FormBorderStyle.FixedDialog;
+        this.Text = "AES File Transfer - Client/Server";
+        this.Size = new Size(700, 650);
+        this.BackColor = Color.White;
+        this.FormBorderStyle = FormBorderStyle.FixedSingle;
         this.StartPosition = FormStartPosition.CenterScreen;
+        this.MaximizeBox = false;
 
-        //InitCustomUI();
-        SetupTabs();
+        SetupUI();
     }
-    private void SetupTabs()
-{
-    TabControl tabControl = new TabControl { Dock = DockStyle.Fill };
-    
-    // --- TAB GỬI FILE ---
-    TabPage tabSend = new TabPage("Gửi File (Client)");
-    Label lblIP = new Label { Text = "IP Máy Nhận:", Top = 20, Left = 20 };
-    TextBox txtIP = new TextBox { Name = "txtIP", Text = "127.0.0.1", Top = 20, Left = 120, Width = 150 };
-    
-    Button btnBrowse = new Button { Text = "Chọn File", Top = 60, Left = 20 };
-    TextBox txtPath = new TextBox { Name = "txtPath", Top = 60, Left = 120, Width = 250, ReadOnly = true };
-    
-    Button btnSend = new Button { Name = "btnSend", Text = "MÃ HÓA & GỬI", Top = 120, Left = 120, Width = 150, Height = 40, BackColor = Color.LightBlue };
-    
-    tabSend.Controls.AddRange(new Control[] { lblIP, txtIP, btnBrowse, txtPath, btnSend });
 
-    // --- TAB NHẬN FILE ---
-    TabPage tabReceive = new TabPage("Nhận File (Server)");
-    Label lblPort = new Label { Text = "Cổng (Port):", Top = 20, Left = 20 };
-    TextBox txtPort = new TextBox { Name = "txtPort", Text = "5000", Top = 20, Left = 120, Width = 80 };
-    
-    Button btnStartServer = new Button { Name = "btnStartServer", Text = "BẬT SERVER", Top = 60, Left = 20, Width = 100 };
-    ListBox lstLog = new ListBox { Name = "lstLog", Top = 100, Left = 20, Width = 350, Height = 150 };
-    
-    tabReceive.Controls.AddRange(new Control[] { lblPort, txtPort, btnStartServer, lstLog });
-
-    // Thêm các tab vào Control chính
-    tabControl.TabPages.Add(tabSend);
-    tabControl.TabPages.Add(tabReceive);
-    this.Controls.Add(tabControl);
-}
-
-    private void InitCustomUI()
+    private void SetupUI()
     {
-        // 1. Header Panel với Gradient
-        headerPanel = new Panel();
-        headerPanel.Dock = DockStyle.Top;
-        headerPanel.Height = 80;
-        headerPanel.BackColor = Color.FromArgb(45, 45, 48);
+        // ==========================================
+        // THIẾT KẾ TAB CLIENT
+        // ==========================================
+        tabControl = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10) };
+        tabClient = new TabPage("📤 Client - Gửi File");
+        tabServer = new TabPage("📥 Server - Nhận File");
 
-        lblTitle = new Label();
-        lblTitle.Text = "SECURITY FILE VAULT";
-        lblTitle.ForeColor = Color.White;
-        lblTitle.Font = new Font("Segoe UI", 16, FontStyle.Bold);
-        lblTitle.Location = new Point(20, 25);
-        lblTitle.AutoSize = true;
-        headerPanel.Controls.Add(lblTitle);
+        // --- TAB CLIENT ---
+        Label lblFile = new Label { Text = "Chọn file:", Top = 20, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        txtFilePath = new TextBox { Top = 20, Left = 120, Width = 420, ReadOnly = true, BackColor = Color.WhiteSmoke };
+        btnBrowse = new Button { Text = "Duyệt...", Top = 18, Left = 550, Width = 100, Height = 40 };
+        btnBrowse.Click += (s, e) => SelectFile();
 
-        // 2. Ô nhập đường dẫn (Custom looking)
-        txtPath = new TextBox();
-        txtPath.Location = new Point(30, 120);
-        txtPath.Size = new Size(340, 35);
-        txtPath.BackColor = Color.FromArgb(60, 60, 60);
-        txtPath.ForeColor = Color.White;
-        txtPath.BorderStyle = BorderStyle.FixedSingle;
-        txtPath.Font = new Font("Segoe UI", 11);
-        txtPath.PlaceholderText = " Chọn file cần bảo mật...";
+        Label lblKey = new Label { Text = "Key (16 ký tự):", Top = 60, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        txtKey = new TextBox
+        {
+            Top = 60,
+            Left = 120,
+            Width = 420,
+            Text = "1234567890123456",
+            BackColor = Color.WhiteSmoke
+        };
 
-        // 3. Nút Chọn File (Style hiện đại)
-        btnSelect = new Button();
-        btnSelect.Text = "Duyệt";
-        btnSelect.Location = new Point(380, 118);
-        btnSelect.Size = new Size(80, 32);
-        btnSelect.FlatStyle = FlatStyle.Flat;
-        btnSelect.FlatAppearance.BorderSize = 0;
-        btnSelect.BackColor = Color.FromArgb(0, 122, 204);
-        btnSelect.ForeColor = Color.White;
-        btnSelect.Cursor = Cursors.Hand;
-        btnSelect.Click += (s, e) => SelectFile();
+        Label lblServerIP = new Label { Text = "Server IP:", Top = 100, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        TextBox txtServerIP = new TextBox
+        {
+            Top = 100,
+            Left = 120,
+            Width = 420,
+            Text = "192.168.1.122",
+            BackColor = Color.WhiteSmoke
+        };
 
-        // 4. Nút Hành động chính (Mã hóa)
-        btnAction = new Button();
-        btnAction.Text = "BẮT ĐẦU MÃ HÓA";
-        btnAction.Location = new Point(30, 180);
-        btnAction.Size = new Size(430, 50);
-        btnAction.FlatStyle = FlatStyle.Flat;
-        btnAction.Font = new Font("Segoe UI", 12, FontStyle.Bold);
-        btnAction.BackColor = Color.FromArgb(37, 160, 67); // Màu xanh lá hiện đại
-        btnAction.ForeColor = Color.White;
-        btnAction.FlatAppearance.BorderSize = 0;
-        btnAction.Cursor = Cursors.Hand;
+        Label lblServerPort = new Label { Text = "Server Port:", Top = 140, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        TextBox txtServerPort = new TextBox
+        {
+            Top = 140,
+            Left = 120,
+            Width = 420,
+            Text = "5000",
+            BackColor = Color.WhiteSmoke
+        };
 
-        // 5. Label trạng thái
-        lblStatus = new Label();
-        lblStatus.Text = "Trạng thái: Sẵn sàng";
-        lblStatus.ForeColor = Color.Gray;
-        lblStatus.Location = new Point(30, 250);
-        lblStatus.AutoSize = true;
+        btnEncryptAndSend = new Button
+        {
+            Text = "🔒 MÃ HÓA & GỬI FILE",
+            Top = 180,
+            Left = 120,
+            Width = 420,
+            Height = 50,
+            BackColor = Color.FromArgb(50, 150, 250),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 11, FontStyle.Bold),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        btnEncryptAndSend.Click += async (s, e) => await EncryptAndSendFile(txtServerIP.Text, txtServerPort.Text, txtKey.Text);
 
-        // Thêm vào Form
-        this.Controls.Add(headerPanel);
-        this.Controls.Add(txtPath);
-        this.Controls.Add(btnSelect);
-        this.Controls.Add(btnAction);
-        this.Controls.Add(lblStatus);
-        InitEvents();
+        lblClientStatus = new Label { Text = "Trạng thái: Sẵn sàng", Top = 240, Left = 20, Width = 500, ForeColor = Color.Green, Font = new Font("Segoe UI", 9) };
+
+        Label lblLog = new Label { Text = "📋 Log:", Top = 270, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        txtClientLog = new TextBox
+        {
+            Top = 290,
+            Left = 20,
+            Width = 630,
+            Height = 230,
+            Multiline = true,
+            ScrollBars = ScrollBars.Vertical,
+            ReadOnly = true,
+            BackColor = Color.Black,
+            ForeColor = Color.Lime,
+            Font = new Font("Courier New", 9)
+        };
+
+        tabClient.Controls.AddRange(new Control[] {
+            lblFile, txtFilePath, btnBrowse,
+            lblKey, txtKey,
+            lblServerIP, txtServerIP,
+            lblServerPort, txtServerPort,
+            btnEncryptAndSend,
+            lblClientStatus,
+            lblLog, txtClientLog
+        });
+
+        // --- TAB SERVER ---
+        lblServerStatus = new Label
+        {
+            Text = "🔴 Server: Dừng",
+            Top = 20,
+            Left = 20,
+            Width = 300,
+            ForeColor = Color.Red,
+            Font = new Font("Segoe UI", 11, FontStyle.Bold)
+        };
+
+        Label lblPort = new Label { Text = "Port:", Top = 20, Left = 450, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        TextBox txtPort = new TextBox
+        {
+            Top = 20,
+            Left = 500,
+            Width = 80,
+            Text = "5000",
+            BackColor = Color.WhiteSmoke
+        };
+
+        btnStartServer = new Button
+        {
+            Text = "▶ BẬT SERVER",
+            Top = 60,
+            Left = 20,
+            Width = 150,
+            Height = 40,
+            BackColor = Color.FromArgb(50, 200, 50),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        btnStartServer.Click += (s, e) => StartServer(txtPort.Text);
+
+        btnStopServer = new Button
+        {
+            Text = "⏹ DỪNG SERVER",
+            Top = 60,
+            Left = 180,
+            Width = 150,
+            Height = 40,
+            BackColor = Color.FromArgb(200, 50, 50),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            Enabled = false
+        };
+        btnStopServer.Click += (s, e) => StopServer();
+
+        Label lblEnc = new Label { Text = "🔐 Dữ liệu mã hóa nhận được (Hex):", Top = 110, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        txtEncryptedReceived = new TextBox
+        {
+            Top = 135,
+            Left = 20,
+            Width = 630,
+            Height = 150,
+            Multiline = true,
+            ScrollBars = ScrollBars.Vertical,
+            ReadOnly = true,
+            BackColor = Color.Black,
+            ForeColor = Color.Lime,
+            Font = new Font("Courier New", 9)
+        };
+
+        Label lblDec = new Label { Text = "✅ Nội dung sau khi giải mã:", Top = 295, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        txtDecryptedResult = new TextBox
+        {
+            Top = 320,
+            Left = 20,
+            Width = 630,
+            Height = 180,
+            Multiline = true,
+            ScrollBars = ScrollBars.Vertical,
+            ReadOnly = true,
+            BackColor = Color.WhiteSmoke,
+            Font = new Font("Segoe UI", 9)
+        };
+
+        tabServer.Controls.AddRange(new Control[] {
+            lblServerStatus,
+            lblPort, txtPort,
+            btnStartServer, btnStopServer,
+            lblEnc, txtEncryptedReceived,
+            lblDec, txtDecryptedResult
+        });
+
+        // Thêm tab vào control chính
+        tabControl.TabPages.Add(tabClient);
+        tabControl.TabPages.Add(tabServer);
+        this.Controls.Add(tabControl);
     }
 
     private void SelectFile()
     {
-        using (OpenFileDialog ofd = new OpenFileDialog())
+        try
         {
-            if (ofd.ShowDialog() == DialogResult.OK)
+            using (OpenFileDialog ofd = new OpenFileDialog())
             {
-                txtPath.Text = ofd.FileName;
-                lblStatus.Text = "Trạng thái: Đã chọn file";
-                lblStatus.ForeColor = Color.LightGreen;
+                ofd.Title = "Chọn file cần mã hóa";
+                ofd.Filter = "Tất cả file|*.*|File text|*.txt|File image|*.jpg;*.png;*.bmp";
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    txtFilePath.Text = ofd.FileName;
+                    Log($"✓ Đã chọn file: {Path.GetFileName(ofd.FileName)}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Lỗi khi chọn file: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Log($"❌ Lỗi chọn file: {ex.Message}");
+        }
+    }
+
+    private async Task EncryptAndSendFile(string serverIP, string portStr, string key)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(txtFilePath.Text))
+            {
+                MessageBox.Show("Vui lòng chọn file!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (key.Length != 16)
+            {
+                MessageBox.Show("Key phải là 16 ký tự cho AES-128!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (!int.TryParse(portStr, out int port))
+            {
+                MessageBox.Show("Port phải là số!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            btnEncryptAndSend.Enabled = false;
+            lblClientStatus.Text = "Trạng thái: Đang xử lý...";
+            lblClientStatus.ForeColor = Color.Orange;
+            Log("⏳ Bắt đầu mã hóa file...");
+
+            string filePath = txtFilePath.Text;
+            byte[] fileData = File.ReadAllBytes(filePath);
+            byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+            string directory = Path.GetDirectoryName(filePath);
+            string fileName = Path.GetFileNameWithoutExtension(filePath);
+            string extension = Path.GetExtension(filePath);
+
+            string output = Path.Combine(directory, fileName + "_ma" + extension);
+
+            // Mã hóa file
+            byte[] encryptedData = AESFileManual.EncryptFileManual(filePath, output,keyBytes);
+            Log($"✓ Mã hóa thành công ({encryptedData.Length} bytes)");
+            Log($"📤 Gửi đến {serverIP}:{port}...");
+
+            // Gửi đến server
+            await SendToServer(serverIP, port, Path.GetFileName(filePath), encryptedData);
+
+            lblClientStatus.Text = "Trạng thái: Gửi thành công!";
+            lblClientStatus.ForeColor = Color.Green;
+            Log("✓ Gửi file thành công!");
+            MessageBox.Show("Gửi file thành công!", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            lblClientStatus.Text = $"Trạng thái: Lỗi - {ex.Message}";
+            lblClientStatus.ForeColor = Color.Red;
+            Log($"❌ Lỗi: {ex.Message}");
+            MessageBox.Show($"Lỗi: {ex.Message}", "Thất bại", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            btnEncryptAndSend.Enabled = true;
+        }
+    }
+
+    private async Task SendToServer(string ip, int port, string fileName, byte[] data)
+    {
+        using (TcpClient client = new TcpClient())
+        {
+            Log("Da ket noi den Server!");
+            await client.ConnectAsync(ip, port);
+            using (NetworkStream stream = client.GetStream())
+            {
+                // Gửi tên file (length + data)
+                byte[] fileNameBytes = Encoding.UTF8.GetBytes(fileName);
+                stream.Write(BitConverter.GetBytes(fileNameBytes.Length), 0, 4);
+                stream.Write(fileNameBytes, 0, fileNameBytes.Length);
+
+                // Gửi dữ liệu mã hóa
+                stream.Write(BitConverter.GetBytes(data.Length), 0, 4);
+                stream.Write(data, 0, data.Length);
+                stream.Flush();
             }
         }
     }
 
-    private async void InitEvents()
+    private void StartServer(string portStr)
     {
-        btnAction.Click += async (s, e) =>
+        try
         {
-            string ip = "127.0.0.1"; // Ví dụ: 127.0.0.1
-            int port = 5000;
-            //string input = txtPath.Text; // Lấy đường dẫn file từ TextBox
-            string input = "D:\\Documents\\banro_ma.txt";
-            Console.WriteLine("--- Bat dau qua trinh ma hoa ---");
-            Console.WriteLine("Duong dan file: ");
-            if (string.IsNullOrEmpty(input) || !File.Exists(input))
+            if (!int.TryParse(portStr, out int port))
             {
-                MessageBox.Show("Vui lòng chọn một file hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Port phải là số!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            string directory = Path.GetDirectoryName(input);
-            string fileName = Path.GetFileNameWithoutExtension(input);
-            string extension = Path.GetExtension(input);
+            btnStartServer.Enabled = false;
+            btnStopServer.Enabled = true;
+            isServerRunning = true;
+            cancellationTokenSource = new CancellationTokenSource();
 
-            string output = Path.Combine(directory, fileName + "_ma" + extension);
-            // Tạo Key (Trong thực tế, bạn nên lấy từ một ô nhập Password rồi Hash nó)
-            // Ở đây dùng tạm 16 byte mẫu cho AES-128
-            byte[] key = System.Text.Encoding.UTF8.GetBytes("1234567890123456");
+            serverListener = new TcpListener(IPAddress.Any, port);
+            serverListener.Start();
+            lblServerStatus.Text = $"🟢 Server: Chạy (Port {port})";
+            lblServerStatus.ForeColor = Color.Green;
+            Log($"✓ Server khởi động trên port {port}");
 
-            try
+            // Lắng nghe client trong background
+            _ = ListenForClientsAsync(cancellationTokenSource.Token);
+        }
+        catch (Exception ex)
+        {
+            lblServerStatus.Text = "🔴 Server: Lỗi";
+            lblServerStatus.ForeColor = Color.Red;
+            Log($"❌ Lỗi khởi động server: {ex.Message}");
+            btnStartServer.Enabled = true;
+            btnStopServer.Enabled = false;
+        }
+    }
+
+    private void StopServer()
+    {
+        try
+        {
+            isServerRunning = false;
+            cancellationTokenSource?.Cancel();
+            serverListener?.Stop();
+
+            lblServerStatus.Text = "🔴 Server: Dừng";
+            lblServerStatus.ForeColor = Color.Red;
+            Log("✓ Server đã dừng");
+
+            btnStartServer.Enabled = true;
+            btnStopServer.Enabled = false;
+        }
+        catch (Exception ex)
+        {
+            Log($"❌ Lỗi dừng server: {ex.Message}");
+        }
+    }
+
+    private async Task ListenForClientsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
             {
-                lblStatus.Text = "Trạng thái: Đang mã hóa...";
-                lblStatus.ForeColor = Color.Yellow;
-                btnAction.Enabled = false; // Khóa nút để tránh nhấn nhiều lần
-
-                // GỌI HÀM LOGIC CỦA BẠN
-                byte[] encryptedData = AESFileManual.EncryptFileManual(input, output, key);
-
-                lblStatus.Text = "Trạng thái: Mã hóa thành công!";
-                lblStatus.ForeColor = Color.LightGreen;
-                FileSender senderService = new FileSender();
-                await senderService.SendFileAsync(ip, port, input, encryptedData);
-
-                MessageBox.Show("Gửi file thành công rực rỡ!");
-                // MessageBox.Show($"File đã được bảo mật tại:\n{output}", "Thành công");
+                if (serverListener.Pending())
+                {
+                    TcpClient client = await serverListener.AcceptTcpClientAsync(cancellationToken);
+                    _ = HandleClientAsync2(client, cancellationToken);
+                }
+                else
+                {
+                    await Task.Delay(100, cancellationToken);
+                }
             }
-            catch (Exception ex)
+        }
+        catch (OperationCanceledException)
+        {
+            // Bình thường khi server dừng
+        }
+        catch (Exception ex)
+        {
+            if (isServerRunning)
+                Log($"❌ Lỗi nghe client: {ex.Message}");
+        }
+    }
+
+    private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using (client)
+            using (NetworkStream stream = client.GetStream())
             {
-                MessageBox.Show($"Lỗi: {ex.Message}", "Thất bại");
-                lblStatus.Text = "Trạng thái: Có lỗi xảy ra";
-                lblStatus.ForeColor = Color.Red;
+                byte[] lengthBuffer = new byte[4];
+
+                // Nhận tên file
+                await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
+                int fileNameLength = BitConverter.ToInt32(lengthBuffer, 0);
+                byte[] fileNameBytes = new byte[fileNameLength];
+                await stream.ReadExactlyAsync(fileNameBytes, 0, fileNameLength, cancellationToken);
+                string fileName = Encoding.UTF8.GetString(fileNameBytes);
+
+                // Nhận dữ liệu mã hóa
+                await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
+                int dataLength = BitConverter.ToInt32(lengthBuffer, 0);
+                byte[] encryptedData = new byte[dataLength];
+                await stream.ReadExactlyAsync(encryptedData, 0, dataLength, cancellationToken);
+
+                // Hiển thị dữ liệu mã hóa (Hex)
+                string hexData = BitConverter.ToString(encryptedData).Replace("-", "");
+                Invoke((Action)(() =>
+                {
+                    txtEncryptedReceived.Text = $"File: {fileName}\r\nKích thước: {dataLength} bytes\r\n\r{hexData.Substring(0, Math.Min(200, hexData.Length))}...";
+                    Log($"📥 Nhận file: {fileName} ({dataLength} bytes)");
+                }));
+
+                // Giải mã
+                byte[] key = Encoding.UTF8.GetBytes("1234567890123456");
+                byte[] decryptedData = AESEncryption.DecryptAES(encryptedData, key);
+                string decryptedText = Encoding.UTF8.GetString(decryptedData);
+
+                Invoke((Action)(() =>
+                {
+                    txtDecryptedResult.Text = decryptedText;
+                    Log("✓ Giải mã thành công!");
+                }));
             }
-            finally
+        }
+        catch (Exception ex)
+        {
+            Log($"❌ Lỗi xử lý client: {ex.Message}");
+        }
+    }
+
+    private async Task HandleClientAsync2(TcpClient client, CancellationToken cancellationToken)
+{
+    try
+    {
+        using (client)
+        using (NetworkStream stream = client.GetStream())
+        {
+            byte[] lengthBuffer = new byte[4];
+
+            // --- BƯỚC 1: NHẬN TÊN FILE ---
+            // Đọc 4 byte đầu tiên để biết độ dài tên file
+            await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
+            int fileNameLength = BitConverter.ToInt32(lengthBuffer, 0);
+            
+            byte[] fileNameBytes = new byte[fileNameLength];
+            await stream.ReadExactlyAsync(fileNameBytes, 0, fileNameLength, cancellationToken);
+            string fileName = Encoding.UTF8.GetString(fileNameBytes);
+
+            // --- BƯỚC 2: NHẬN DỮ LIỆU MÃ HÓA (LUỒNG DATA) ---
+            // Đọc 4 byte tiếp theo để biết độ dài mảng encryptedData
+            await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
+            int dataLength = BitConverter.ToInt32(lengthBuffer, 0);
+            
+            byte[] encryptedData = new byte[dataLength];
+            await stream.ReadExactlyAsync(encryptedData, 0, dataLength, cancellationToken);
+
+            // Hiển thị thông tin nhận được lên UI
+            Invoke((Action)(() => {
+                Log($"📥 Nhận gói tin: {fileName} ({dataLength} bytes)");
+                txtEncryptedReceived.Text = BitConverter.ToString(encryptedData).Replace("-", " ");
+            }));
+
+            // --- BƯỚC 3: GIẢI MÃ BẰNG HÀM MANUAL ---
+            byte[] key = Encoding.UTF8.GetBytes("1234567890123456"); // Key phải đủ 16 byte
+            
+            try 
             {
-                btnAction.Enabled = true;
+                // Gọi hàm DecryptDataManual bạn vừa sửa
+                byte[] decryptedData = AESFileDecryptor.DecryptDataManual(encryptedData, key);
+                
+                // Chuyển mảng byte "sạch" sang String
+                string decryptedText = Encoding.UTF8.GetString(decryptedData);
+
+                // Hiển thị kết quả cuối cùng
+                Invoke((Action)(() => {
+                    txtDecryptedResult.Text = decryptedText;
+                    Log("✓ Giải mã và xử lý luồng data thành công!");
+                }));
             }
-        };
+            catch (Exception decryptEx)
+            {
+                Invoke((Action)(() => Log($"❌ Lỗi giải mã: {decryptEx.Message}")));
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Invoke((Action)(() => Log($"❌ Lỗi kết nối: {ex.Message}")));
+    }
+}
+
+    private void Log(string message)
+    {
+        Invoke((Action)(() =>
+        {
+            txtClientLog.Text += DateTime.Now.ToString("[HH:mm:ss] ") + message + Environment.NewLine;
+            txtClientLog.SelectionStart = txtClientLog.Text.Length;
+            txtClientLog.ScrollToCaret();
+        }));
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        StopServer();
+        base.OnFormClosing(e);
     }
 }
