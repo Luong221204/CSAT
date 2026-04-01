@@ -116,6 +116,41 @@ public class AESDecryption
         for (int i = 0; i < 16; i++) output[i] = state[i % 4, i / 4];
         return output;
     }
+
+    public static byte[] Decrypt2(byte[] input, byte[] key)
+{
+    int Nk = key.Length / 4;
+    int Nr = Nk + 6;
+
+    byte[] expandedKey = AESEncryption.ExpandKey2(key);
+
+    byte[,] state = new byte[4, 4];
+    for (int i = 0; i < 16; i++)
+        state[i % 4, i / 4] = input[i];
+
+    // Round đầu (round cuối của Encrypt)
+    AddRoundKey(state, expandedKey, Nr);
+
+    // Các vòng ngược
+    for (int round = Nr - 1; round >= 1; round--)
+    {
+        InvShiftRows(state);
+        InvSubBytes(state);
+        AddRoundKey(state, expandedKey, round);
+        InvMixColumns(state);
+    }
+
+    // Round cuối
+    InvShiftRows(state);
+    InvSubBytes(state);
+    AddRoundKey(state, expandedKey, 0);
+
+    byte[] output = new byte[16];
+    for (int i = 0; i < 16; i++)
+        output[i] = state[i % 4, i / 4];
+
+    return output;
+}
 }
 
 
@@ -141,7 +176,7 @@ public class AESFileDecryptor
             Array.Copy(encryptedData, i, block, 0, 16);
 
             // Gọi hàm giải mã "chay" đã viết ở bước trước
-            byte[] decryptedBlock = AESDecryption.Decrypt(block, key);
+            byte[] decryptedBlock = AESDecryption.Decrypt2(block, key);
             Console.WriteLine("giai ma " + System.Text.Encoding.UTF8.GetString(decryptedBlock));
             string hexResult = BitConverter.ToString(decryptedBlock).Replace("-", " ");
             Console.WriteLine("Bản gia ma (HEX): " + hexResult);
@@ -194,7 +229,7 @@ public class AESFileDecryptor
                 Array.Copy(encryptedData, i, block, 0, 16);
 
                 // Gọi hàm giải mã lõi (AES "chay")
-                byte[] decryptedBlock = AESDecryption.Decrypt(block, key);
+                byte[] decryptedBlock = AESDecryption.Decrypt2(block, key);
 
                 ms.Write(decryptedBlock, 0, decryptedBlock.Length);
             }
@@ -219,4 +254,61 @@ public class AESFileDecryptor
             return finalResult; // Trả về mảng byte "sạch"
         }
     }
+
+ public static byte[] DecryptDataCBC(byte[] encryptedData, byte[] key)
+{
+    // 1. Kiểm tra dữ liệu
+    if (encryptedData == null || encryptedData.Length < 16 || encryptedData.Length % 16 != 0)
+    {
+        throw new Exception("Dữ liệu mã hóa không hợp lệ.");
+    }
+
+    // 2. Tách IV (16 byte đầu)
+    byte[] iv = new byte[16];
+    Array.Copy(encryptedData, 0, iv, 0, 16);
+
+    int cipherLength = encryptedData.Length - 16;
+
+    using (MemoryStream ms = new MemoryStream())
+    {
+        byte[] previousBlock = iv;
+
+        // 3. Giải mã từng block
+        for (int i = 16; i < encryptedData.Length; i += 16)
+        {
+            byte[] block = new byte[16];
+            Array.Copy(encryptedData, i, block, 0, 16);
+
+            // AES decrypt core
+            byte[] decryptedBlock = AESDecryption.Decrypt2(block, key);
+
+            // 🔥 XOR với block trước (CBC)
+            for (int j = 0; j < 16; j++)
+            {
+                decryptedBlock[j] ^= previousBlock[j];
+            }
+
+            ms.Write(decryptedBlock, 0, 16);
+
+            // 🔥 cập nhật (rất quan trọng)
+            previousBlock = block;
+        }
+
+        byte[] decryptedData = ms.ToArray();
+
+        // 4. Remove PKCS7 padding
+        int paddingLength = decryptedData[decryptedData.Length - 1];
+
+        if (paddingLength <= 0 || paddingLength > 16)
+        {
+            throw new Exception("Padding không hợp lệ (sai key hoặc dữ liệu lỗi).");
+        }
+
+        int finalLength = decryptedData.Length - paddingLength;
+        byte[] finalResult = new byte[finalLength];
+        Array.Copy(decryptedData, finalResult, finalLength);
+
+        return finalResult;
+    }
+}
 }

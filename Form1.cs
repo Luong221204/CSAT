@@ -15,7 +15,7 @@ public partial class Form1 : Form
     private TabPage tabClient, tabServer;
 
     // Controls cho Tab Client
-    private TextBox txtFilePath, txtKey, txtClientLog;
+    private TextBox txtFilePath, txtKey, txtClientLog, txtKeyServer;
     private Button btnBrowse, btnEncryptAndSend;
     private Label lblClientStatus;
 
@@ -28,6 +28,8 @@ public partial class Form1 : Form
     private bool isServerRunning = false;
     private CancellationTokenSource cancellationTokenSource;
 
+    private RadioButton rdoECB_Client, rdoCBC_Client;
+    private RadioButton rdoECB_Server, rdoCBC_Server;
     public Form1()
     {
         this.Text = "AES File Transfer - Client/Server";
@@ -55,7 +57,7 @@ public partial class Form1 : Form
         btnBrowse = new Button { Text = "Duyệt...", Top = 18, Left = 550, Width = 100, Height = 40 };
         btnBrowse.Click += (s, e) => SelectFile();
 
-        Label lblKey = new Label { Text = "Key (16 ký tự):", Top = 60, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        Label lblKey = new Label { Text = "Key :", Top = 60, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
         txtKey = new TextBox
         {
             Top = 60,
@@ -64,7 +66,28 @@ public partial class Form1 : Form
             Text = "1234567890123456",
             BackColor = Color.WhiteSmoke
         };
+        Label lblModeClient = new Label
+        {
+            Text = "Mode:",
+            Top = 170,
+            Left = 20,
+            Font = new Font("Segoe UI", 10, FontStyle.Bold)
+        };
 
+        rdoECB_Client = new RadioButton
+        {
+            Text = "ECB",
+            Top = 170,
+            Left = 120
+        };
+
+        rdoCBC_Client = new RadioButton
+        {
+            Text = "CBC",
+            Top = 170,
+            Left = 300,
+            Checked = true // mặc định CBC
+        };
         Label lblServerIP = new Label { Text = "Server IP:", Top = 100, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
         TextBox txtServerIP = new TextBox
         {
@@ -88,7 +111,7 @@ public partial class Form1 : Form
         btnEncryptAndSend = new Button
         {
             Text = "🔒 MÃ HÓA & GỬI FILE",
-            Top = 180,
+            Top = 210,
             Left = 120,
             Width = 420,
             Height = 50,
@@ -100,12 +123,12 @@ public partial class Form1 : Form
         };
         btnEncryptAndSend.Click += async (s, e) => await EncryptAndSendFile(txtServerIP.Text, txtServerPort.Text, txtKey.Text);
 
-        lblClientStatus = new Label { Text = "Trạng thái: Sẵn sàng", Top = 240, Left = 20, Width = 500, ForeColor = Color.Green, Font = new Font("Segoe UI", 9) };
+        lblClientStatus = new Label { Text = "Trạng thái: Sẵn sàng", Top = 270, Left = 20, Width = 500, ForeColor = Color.Green, Font = new Font("Segoe UI", 9) };
 
-        Label lblLog = new Label { Text = "📋 Log:", Top = 270, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        Label lblLog = new Label { Text = "📋 Log:", Top = 300, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
         txtClientLog = new TextBox
         {
-            Top = 290,
+            Top = 320,
             Left = 20,
             Width = 630,
             Height = 230,
@@ -124,6 +147,8 @@ public partial class Form1 : Form
             lblServerPort, txtServerPort,
             btnEncryptAndSend,
             lblClientStatus,
+            lblModeClient, rdoECB_Client, rdoCBC_Client,
+
             lblLog, txtClientLog
         });
 
@@ -137,21 +162,50 @@ public partial class Form1 : Form
             ForeColor = Color.Red,
             Font = new Font("Segoe UI", 11, FontStyle.Bold)
         };
-
+        Label lblKeyServer = new Label { Text = "Key:", Top = 60, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        txtKeyServer = new TextBox
+        {
+            Top = 60,
+            Left = 120,
+            Width = 420,
+            Text = "1234567890123456",
+            BackColor = Color.WhiteSmoke
+        };
         Label lblPort = new Label { Text = "Port:", Top = 20, Left = 450, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
         TextBox txtPort = new TextBox
         {
             Top = 20,
-            Left = 500,
+            Left = 560,
             Width = 80,
             Text = "5000",
             BackColor = Color.WhiteSmoke
         };
+        Label lblModeServer = new Label
+        {
+            Text = "Mode:",
+            Top = 100,
+            Left = 20,
+            Font = new Font("Segoe UI", 10, FontStyle.Bold)
+        };
 
+        rdoECB_Server = new RadioButton
+        {
+            Text = "ECB",
+            Top = 100,
+            Left = 120
+        };
+
+        rdoCBC_Server = new RadioButton
+        {
+            Text = "CBC",
+            Top = 100,
+            Left = 300,
+            Checked = true
+        };
         btnStartServer = new Button
         {
             Text = "▶ BẬT SERVER",
-            Top = 60,
+            Top = 140,
             Left = 20,
             Width = 150,
             Height = 40,
@@ -166,7 +220,7 @@ public partial class Form1 : Form
         btnStopServer = new Button
         {
             Text = "⏹ DỪNG SERVER",
-            Top = 60,
+            Top = 140,
             Left = 180,
             Width = 150,
             Height = 40,
@@ -179,10 +233,10 @@ public partial class Form1 : Form
         };
         btnStopServer.Click += (s, e) => StopServer();
 
-        Label lblEnc = new Label { Text = "🔐 Dữ liệu mã hóa nhận được (Hex):", Top = 110, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        Label lblEnc = new Label { Text = "🔐 Dữ liệu mã hóa nhận được (Hex):", Top = 180, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
         txtEncryptedReceived = new TextBox
         {
-            Top = 135,
+            Top = 215,
             Left = 20,
             Width = 630,
             Height = 150,
@@ -194,10 +248,10 @@ public partial class Form1 : Form
             Font = new Font("Courier New", 9)
         };
 
-        Label lblDec = new Label { Text = "✅ Nội dung sau khi giải mã:", Top = 295, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+        Label lblDec = new Label { Text = "✅ Nội dung sau khi giải mã:", Top = 375, Left = 20, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
         txtDecryptedResult = new TextBox
         {
-            Top = 320,
+            Top = 400,
             Left = 20,
             Width = 630,
             Height = 180,
@@ -211,9 +265,12 @@ public partial class Form1 : Form
         tabServer.Controls.AddRange(new Control[] {
             lblServerStatus,
             lblPort, txtPort,
+            lblKeyServer, txtKeyServer,
             btnStartServer, btnStopServer,
             lblEnc, txtEncryptedReceived,
-            lblDec, txtDecryptedResult
+            lblDec, txtDecryptedResult,
+                lblModeServer, rdoECB_Server, rdoCBC_Server
+
         });
 
         // Thêm tab vào control chính
@@ -254,11 +311,11 @@ public partial class Form1 : Form
                 return;
             }
 
-            if (key.Length != 16)
+            /*if (key.Length != 16)
             {
                 MessageBox.Show("Key phải là 16 ký tự cho AES-128!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
-            }
+            }*/
 
             if (!int.TryParse(portStr, out int port))
             {
@@ -281,12 +338,27 @@ public partial class Form1 : Form
             string output = Path.Combine(directory, fileName + "_ma" + extension);
 
             // Mã hóa file
-            byte[] encryptedData = AESFileManual.EncryptFileManual(filePath, output,keyBytes);
-            Log($"✓ Mã hóa thành công ({encryptedData.Length} bytes)");
-            Log($"📤 Gửi đến {serverIP}:{port}...");
 
-            // Gửi đến server
-            await SendToServer(serverIP, port, Path.GetFileName(filePath), encryptedData);
+            string mode = rdoECB_Client.Checked ? "ECB" : "CBC";
+            if (mode == "ECB")
+            {
+                byte[] encryptedData = AESFileManual.EncryptFileManual(filePath, output, keyBytes);
+                Log($"✓ Mã hóa thành công ({encryptedData.Length} bytes)");
+                Log($"📤 Gửi đến {serverIP}:{port}...");
+
+                // Gửi đến server
+                await SendToServer(serverIP, port, Path.GetFileName(filePath), encryptedData);
+            }
+            else
+            {
+                byte[] encryptedData = AESFileManual.EncryptFileCBC(filePath, output, keyBytes);
+                Log($"✓ Mã hóa thành công ({encryptedData.Length} bytes)");
+                Log($"📤 Gửi đến {serverIP}:{port}...");
+
+                // Gửi đến server
+                await SendToServer(serverIP, port, Path.GetFileName(filePath), encryptedData);
+            }
+
 
             lblClientStatus.Text = "Trạng thái: Gửi thành công!";
             lblClientStatus.ForeColor = Color.Green;
@@ -334,6 +406,12 @@ public partial class Form1 : Form
             if (!int.TryParse(portStr, out int port))
             {
                 MessageBox.Show("Port phải là số!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (txtKeyServer.Text.Length == 0 || txtKeyServer.Text.Length > 32)
+            {
+                MessageBox.Show("Key phải là chuỗi đúng định dạng", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -459,65 +537,85 @@ public partial class Form1 : Form
     }
 
     private async Task HandleClientAsync2(TcpClient client, CancellationToken cancellationToken)
-{
-    try
     {
-        using (client)
-        using (NetworkStream stream = client.GetStream())
+        try
         {
-            byte[] lengthBuffer = new byte[4];
-
-            // --- BƯỚC 1: NHẬN TÊN FILE ---
-            // Đọc 4 byte đầu tiên để biết độ dài tên file
-            await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
-            int fileNameLength = BitConverter.ToInt32(lengthBuffer, 0);
-            
-            byte[] fileNameBytes = new byte[fileNameLength];
-            await stream.ReadExactlyAsync(fileNameBytes, 0, fileNameLength, cancellationToken);
-            string fileName = Encoding.UTF8.GetString(fileNameBytes);
-
-            // --- BƯỚC 2: NHẬN DỮ LIỆU MÃ HÓA (LUỒNG DATA) ---
-            // Đọc 4 byte tiếp theo để biết độ dài mảng encryptedData
-            await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
-            int dataLength = BitConverter.ToInt32(lengthBuffer, 0);
-            
-            byte[] encryptedData = new byte[dataLength];
-            await stream.ReadExactlyAsync(encryptedData, 0, dataLength, cancellationToken);
-
-            // Hiển thị thông tin nhận được lên UI
-            Invoke((Action)(() => {
-                Log($"📥 Nhận gói tin: {fileName} ({dataLength} bytes)");
-                txtEncryptedReceived.Text = BitConverter.ToString(encryptedData).Replace("-", " ");
-            }));
-
-            // --- BƯỚC 3: GIẢI MÃ BẰNG HÀM MANUAL ---
-            byte[] key = Encoding.UTF8.GetBytes("1234567890123456"); // Key phải đủ 16 byte
-            
-            try 
+            using (client)
+            using (NetworkStream stream = client.GetStream())
             {
-                // Gọi hàm DecryptDataManual bạn vừa sửa
-                byte[] decryptedData = AESFileDecryptor.DecryptDataManual(encryptedData, key);
-                
-                // Chuyển mảng byte "sạch" sang String
-                string decryptedText = Encoding.UTF8.GetString(decryptedData);
+                byte[] lengthBuffer = new byte[4];
 
-                // Hiển thị kết quả cuối cùng
-                Invoke((Action)(() => {
-                    txtDecryptedResult.Text = decryptedText;
-                    Log("✓ Giải mã và xử lý luồng data thành công!");
+                // --- BƯỚC 1: NHẬN TÊN FILE ---
+                // Đọc 4 byte đầu tiên để biết độ dài tên file
+                await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
+                int fileNameLength = BitConverter.ToInt32(lengthBuffer, 0);
+
+                byte[] fileNameBytes = new byte[fileNameLength];
+                await stream.ReadExactlyAsync(fileNameBytes, 0, fileNameLength, cancellationToken);
+                string fileName = Encoding.UTF8.GetString(fileNameBytes);
+
+                // --- BƯỚC 2: NHẬN DỮ LIỆU MÃ HÓA (LUỒNG DATA) ---
+                // Đọc 4 byte tiếp theo để biết độ dài mảng encryptedData
+                await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
+                int dataLength = BitConverter.ToInt32(lengthBuffer, 0);
+
+                byte[] encryptedData = new byte[dataLength];
+                await stream.ReadExactlyAsync(encryptedData, 0, dataLength, cancellationToken);
+
+                // Hiển thị thông tin nhận được lên UI
+                Invoke((Action)(() =>
+                {
+                    Log($"📥 Nhận gói tin: {fileName} ({dataLength} bytes)");
+                    txtEncryptedReceived.Text = BitConverter.ToString(encryptedData).Replace("-", " ");
                 }));
-            }
-            catch (Exception decryptEx)
-            {
-                Invoke((Action)(() => Log($"❌ Lỗi giải mã: {decryptEx.Message}")));
+
+                // --- BƯỚC 3: GIẢI MÃ BẰNG HÀM MANUAL ---
+                byte[] key = Encoding.UTF8.GetBytes(txtKeyServer.Text); // Key phải đủ 16 byte
+
+                try
+                {
+
+                    string mode = rdoECB_Server.Checked ? "ECB" : "CBC";
+                    if(mode == "ECB")
+                    {
+                        // Gọi hàm DecryptDataManual bạn vừa sửa
+                        byte[] decryptedData = AESFileDecryptor.DecryptDataManual(encryptedData, key);
+
+                        // Chuyển mảng byte "sạch" sang String
+                        string decryptedText = Encoding.UTF8.GetString(decryptedData);
+
+                        // Hiển thị kết quả cuối cùng
+                        Invoke((Action)(() =>
+                        {
+                            txtDecryptedResult.Text = decryptedText;
+                            Log("✓ Giải mã và xử lý luồng data thành công!");
+                        }));
+                    }else{
+                          // Gọi hàm DecryptDataManual bạn vừa sửa
+                        byte[] decryptedData = AESFileDecryptor.DecryptDataCBC(encryptedData, key);
+
+                        // Chuyển mảng byte "sạch" sang String
+                        string decryptedText = Encoding.UTF8.GetString(decryptedData);
+
+                        // Hiển thị kết quả cuối cùng
+                        Invoke((Action)(() =>
+                        {
+                            txtDecryptedResult.Text = decryptedText;
+                            Log("✓ Giải mã và xử lý luồng data thành công!");
+                        }));
+                    }
+                }
+                catch (Exception decryptEx)
+                {
+                    Invoke((Action)(() => Log($"❌ Lỗi giải mã: {decryptEx.Message}")));
+                }
             }
         }
+        catch (Exception ex)
+        {
+            Invoke((Action)(() => Log($"❌ Lỗi kết nối: {ex.Message}")));
+        }
     }
-    catch (Exception ex)
-    {
-        Invoke((Action)(() => Log($"❌ Lỗi kết nối: {ex.Message}")));
-    }
-}
 
     private void Log(string message)
     {

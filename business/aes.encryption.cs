@@ -52,6 +52,62 @@ public class AESEncryption
         return expandedKey;
     }
 
+    public static byte[] ExpandKey2(byte[] key)
+{
+    int Nk = key.Length / 4;     // số word của key
+    int Nr = Nk + 6;             // số round
+    int Nb = 4;
+
+    int totalBytes = Nb * (Nr + 1) * 4; // kích thước expanded key
+    byte[] expandedKey = new byte[totalBytes];
+
+    // Copy key ban đầu
+    Array.Copy(key, expandedKey, key.Length);
+
+    int bytesGenerated = key.Length;
+    int rconIter = 1;
+    byte[] temp = new byte[4];
+
+    while (bytesGenerated < totalBytes)
+    {
+        // Lấy 4 byte trước đó
+        for (int i = 0; i < 4; i++)
+            temp[i] = expandedKey[bytesGenerated - 4 + i];
+
+        // Điều kiện chính (RotWord + SubWord + Rcon)
+        if (bytesGenerated % (Nk * 4) == 0)
+        {
+            // RotWord
+            byte t = temp[0];
+            temp[0] = temp[1];
+            temp[1] = temp[2];
+            temp[2] = temp[3];
+            temp[3] = t;
+
+            // SubWord
+            for (int i = 0; i < 4; i++)
+                temp[i] = SBox[temp[i]];
+
+            temp[0] ^= Rcon[rconIter++];
+        }
+        // 🔥 CHỈ AES-256 có thêm bước này
+        else if (Nk > 6 && bytesGenerated % (Nk * 4) == 16)
+        {
+            for (int i = 0; i < 4; i++)
+                temp[i] = SBox[temp[i]];
+        }
+
+        // XOR với word trước đó Nk
+        for (int i = 0; i < 4; i++)
+        {
+            expandedKey[bytesGenerated] =
+                (byte)(expandedKey[bytesGenerated - Nk * 4] ^ temp[i]);
+            bytesGenerated++;
+        }
+    }
+
+    return expandedKey;
+}
     // 2. AddRoundKey
     private static void AddRoundKey(byte[,] state, byte[] expandedKey, int round)
     {
@@ -134,6 +190,40 @@ public class AESEncryption
         for (int i = 0; i < 16; i++) output[i] = state[i % 4, i / 4];
         return output;
     }
+
+    public static byte[] Encrypt2(byte[] input, byte[] key)
+{
+    int Nk = key.Length / 4; // số word của key
+    int Nr = Nk + 6;         // số round (AES rule)
+    byte[] expandedKey = ExpandKey2(key);
+
+    byte[,] state = new byte[4, 4];
+    for (int i = 0; i < 16; i++)
+        state[i % 4, i / 4] = input[i];
+
+    // Round 0
+    AddRoundKey(state, expandedKey, 0);
+
+    // Main rounds
+    for (int round = 1; round < Nr; round++)
+    {
+        SubBytes(state);
+        ShiftRows(state);
+        MixColumns(state);
+        AddRoundKey(state, expandedKey, round);
+    }
+
+    // Final round (no MixColumns)
+    SubBytes(state);
+    ShiftRows(state);
+    AddRoundKey(state, expandedKey, Nr);
+
+    byte[] output = new byte[16];
+    for (int i = 0; i < 16; i++)
+        output[i] = state[i % 4, i / 4];
+
+    return output;
+}
 }
 
 public class AESFileManual
@@ -165,7 +255,7 @@ public class AESFileManual
             Console.WriteLine("từ mã "+ System.Text.Encoding.UTF8.GetString(block));
 
             // Gọi hàm mã hóa "chay" của bạn ở đây
-            byte[] encryptedBlock = AESEncryption.Encrypt(block, key);
+            byte[] encryptedBlock = AESEncryption.Encrypt2(block, key);
             Console.WriteLine("ma hoa "+ System.Text.Encoding.UTF8.GetString(encryptedBlock));
             string hexResult = BitConverter.ToString(encryptedData).Replace("-", " ");
             Console.WriteLine("Bản mã (HEX): " + hexResult);
@@ -183,4 +273,56 @@ public class AESFileManual
 
         // Phần code mã hóa phía dưới sẽ không chạy do có lệnh return ở trên
     }
+
+    public static byte[] EncryptFileCBC(string inputPath, string outputPath, byte[] key)
+{
+    byte[] fileBytes = File.ReadAllBytes(inputPath);
+
+    // 1. Padding PKCS7
+    int paddingLength = 16 - (fileBytes.Length % 16);
+    byte[] paddedBytes = new byte[fileBytes.Length + paddingLength];
+    Array.Copy(fileBytes, paddedBytes, fileBytes.Length);
+
+    for (int i = fileBytes.Length; i < paddedBytes.Length; i++)
+        paddedBytes[i] = (byte)paddingLength;
+
+    // 2. Tạo IV (16 byte)
+    byte[] iv = new byte[16];
+    using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+    {
+        rng.GetBytes(iv);
+    }
+
+    Console.WriteLine("IV: " + BitConverter.ToString(iv));
+
+    byte[] encryptedData = new byte[paddedBytes.Length];
+    byte[] previousBlock = iv;
+
+    // 3. CBC Encrypt
+    for (int i = 0; i < paddedBytes.Length; i += 16)
+    {
+        byte[] block = new byte[16];
+        Array.Copy(paddedBytes, i, block, 0, 16);
+
+        // 🔥 XOR với block trước
+        for (int j = 0; j < 16; j++)
+            block[j] ^= previousBlock[j];
+
+        byte[] encryptedBlock = AESEncryption.Encrypt2(block, key);
+
+        Array.Copy(encryptedBlock, 0, encryptedData, i, 16);
+
+        previousBlock = encryptedBlock; // update
+    }
+
+    // 4. Ghi file: IV + Cipher
+    byte[] finalData = new byte[16 + encryptedData.Length];
+    Array.Copy(iv, 0, finalData, 0, 16);
+    Array.Copy(encryptedData, 0, finalData, 16, encryptedData.Length);
+
+    File.WriteAllBytes(outputPath, finalData);
+
+    Console.WriteLine("✔ Encrypt CBC xong!");
+    return finalData;
+}
 }
