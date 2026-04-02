@@ -342,7 +342,7 @@ public partial class Form1 : Form
             string mode = rdoECB_Client.Checked ? "ECB" : "CBC";
             if (mode == "ECB")
             {
-                byte[] encryptedData = AESFileManual.EncryptFileManual(filePath, output, keyBytes);
+                byte[] encryptedData = AESFileManual.EncryptFileManualWithHeader(filePath, output, keyBytes);
                 Log($"✓ Mã hóa thành công ({encryptedData.Length} bytes)");
                 Log($"📤 Gửi đến {serverIP}:{port}...");
 
@@ -351,7 +351,7 @@ public partial class Form1 : Form
             }
             else
             {
-                byte[] encryptedData = AESFileManual.EncryptFileCBC(filePath, output, keyBytes);
+                byte[] encryptedData = AESFileManual.EncryptFileCBCWithHeader(filePath, output, keyBytes);
                 Log($"✓ Mã hóa thành công ({encryptedData.Length} bytes)");
                 Log($"📤 Gửi đến {serverIP}:{port}...");
 
@@ -488,54 +488,6 @@ public partial class Form1 : Form
         }
     }
 
-    private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
-    {
-        try
-        {
-            using (client)
-            using (NetworkStream stream = client.GetStream())
-            {
-                byte[] lengthBuffer = new byte[4];
-
-                // Nhận tên file
-                await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
-                int fileNameLength = BitConverter.ToInt32(lengthBuffer, 0);
-                byte[] fileNameBytes = new byte[fileNameLength];
-                await stream.ReadExactlyAsync(fileNameBytes, 0, fileNameLength, cancellationToken);
-                string fileName = Encoding.UTF8.GetString(fileNameBytes);
-
-                // Nhận dữ liệu mã hóa
-                await stream.ReadExactlyAsync(lengthBuffer, 0, 4, cancellationToken);
-                int dataLength = BitConverter.ToInt32(lengthBuffer, 0);
-                byte[] encryptedData = new byte[dataLength];
-                await stream.ReadExactlyAsync(encryptedData, 0, dataLength, cancellationToken);
-
-                // Hiển thị dữ liệu mã hóa (Hex)
-                string hexData = BitConverter.ToString(encryptedData).Replace("-", "");
-                Invoke((Action)(() =>
-                {
-                    txtEncryptedReceived.Text = $"File: {fileName}\r\nKích thước: {dataLength} bytes\r\n\r{hexData.Substring(0, Math.Min(200, hexData.Length))}...";
-                    Log($"📥 Nhận file: {fileName} ({dataLength} bytes)");
-                }));
-
-                // Giải mã
-                byte[] key = Encoding.UTF8.GetBytes("1234567890123456");
-                byte[] decryptedData = AESEncryption.DecryptAES(encryptedData, key);
-                string decryptedText = Encoding.UTF8.GetString(decryptedData);
-
-                Invoke((Action)(() =>
-                {
-                    txtDecryptedResult.Text = decryptedText;
-                    Log("✓ Giải mã thành công!");
-                }));
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"❌ Lỗi xử lý client: {ex.Message}");
-        }
-    }
-
     private async Task HandleClientAsync2(TcpClient client, CancellationToken cancellationToken)
     {
         try
@@ -578,9 +530,10 @@ public partial class Form1 : Form
                     string mode = rdoECB_Server.Checked ? "ECB" : "CBC";
                     if(mode == "ECB")
                     {
-                        // Gọi hàm DecryptDataManual bạn vừa sửa
-                        byte[] decryptedData = AESFileDecryptor.DecryptDataManual(encryptedData, key);
+                        AESFileDecryptor.DecryptDataManualWithHeader(encryptedData, key);
 
+                        // Gọi hàm DecryptDataManual bạn vừa sửa
+                        /*byte[] decryptedData = 
                         // Chuyển mảng byte "sạch" sang String
                         string decryptedText = Encoding.UTF8.GetString(decryptedData);
 
@@ -589,20 +542,21 @@ public partial class Form1 : Form
                         {
                             txtDecryptedResult.Text = decryptedText;
                             Log("✓ Giải mã và xử lý luồng data thành công!");
-                        }));
+                        }));*/
                     }else{
                           // Gọi hàm DecryptDataManual bạn vừa sửa
-                        byte[] decryptedData = AESFileDecryptor.DecryptDataCBC(encryptedData, key);
+                        string output = "D:\\TTCS\\decrypted_file.png";
+                     AESFileDecryptor.DecryptDataCBCToFile(encryptedData, key);
 
                         // Chuyển mảng byte "sạch" sang String
-                        string decryptedText = Encoding.UTF8.GetString(decryptedData);
+                     /*   string decryptedText = Encoding.UTF8.GetString(decryptedData);
 
                         // Hiển thị kết quả cuối cùng
                         Invoke((Action)(() =>
                         {
                             txtDecryptedResult.Text = decryptedText;
                             Log("✓ Giải mã và xử lý luồng data thành công!");
-                        }));
+                        }));*/
                     }
                 }
                 catch (Exception decryptEx)

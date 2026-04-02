@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CSAT")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+eac5cabfc544c734b51f59d16410db0c00a22226")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b981799f6609b69fbc5cec9c781cf42221a13be4")]
 [assembly: System.Reflection.AssemblyProductAttribute("CSAT")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CSAT")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

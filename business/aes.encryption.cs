@@ -274,6 +274,66 @@ public class AESFileManual
         // Phần code mã hóa phía dưới sẽ không chạy do có lệnh return ở trên
     }
 
+    public static byte[] EncryptFileManualWithHeader(string inputPath, string outputPath, byte[] key)
+{
+    // --- BƯỚC 0: CHUẨN BỊ HEADER (ĐỊNH DẠNG FILE) ---
+    string extension = Path.GetExtension(inputPath); // Lấy ví dụ: ".png"
+    byte[] extBytes = System.Text.Encoding.UTF8.GetBytes(extension);
+    byte[] extLength = BitConverter.GetBytes(extBytes.Length); // 4 byte độ dài
+
+    // --- BƯỚC 1: ĐỌC VÀ PADDING PKCS7 ---
+    byte[] fileBytes = File.ReadAllBytes(inputPath);
+    
+    int paddingLength = 16 - (fileBytes.Length % 16);
+    byte[] paddedBytes = new byte[fileBytes.Length + paddingLength];
+    Array.Copy(fileBytes, paddedBytes, fileBytes.Length);
+
+    for (int i = fileBytes.Length; i < paddedBytes.Length; i++)
+    {
+        paddedBytes[i] = (byte)paddingLength;
+    }
+
+    // --- BƯỚC 2: MÃ HÓA TỪNG KHỐI (ECB MODE) ---
+    byte[] encryptedData = new byte[paddedBytes.Length];
+    for (int i = 0; i < paddedBytes.Length; i += 16)
+    {
+        byte[] block = new byte[16];
+        Array.Copy(paddedBytes, i, block, 0, 16);
+
+        // Gọi hàm mã hóa lõi AES của bạn
+        byte[] encryptedBlock = AESEncryption.Encrypt2(block, key);
+        
+        // Lưu khối đã mã hóa vào mảng kết quả
+        Array.Copy(encryptedBlock, 0, encryptedData, i, 16);
+        
+        // Console log dạng Hex (An toàn cho mọi loại file)
+        Console.WriteLine($"Block {i/16} (Base64): {Convert.ToBase64String(encryptedBlock)}");
+    }
+
+    // --- BƯỚC 3: GHÉP HEADER VÀ DỮ LIỆU ĐÃ MÃ HÓA ---
+    // Cấu trúc: [Độ dài Ext (4B)] + [Chuỗi Ext] + [Dữ liệu mã hóa]
+    byte[] finalData = new byte[4 + extBytes.Length + encryptedData.Length];
+    
+    int currentPos = 0;
+    // 1. Ghi độ dài đuôi file
+    Array.Copy(extLength, 0, finalData, currentPos, 4); 
+    currentPos += 4;
+    // 2. Ghi chuỗi đuôi file (.png, .docx...)
+    Array.Copy(extBytes, 0, finalData, currentPos, extBytes.Length); 
+    currentPos += extBytes.Length;
+    // 3. Ghi dữ liệu đã mã hóa
+    Array.Copy(encryptedData, 0, finalData, currentPos, encryptedData.Length);
+
+    // --- BƯỚC 4: GHI FILE ---
+    File.WriteAllBytes(outputPath, finalData);
+
+    Console.WriteLine("--- KẾT QUẢ MÃ HÓA ECB ---");
+    Console.WriteLine($"Định dạng gốc: {extension}");
+    Console.WriteLine($"Đường dẫn file đích: {outputPath}");
+    
+    return finalData;
+}
+
     public static byte[] EncryptFileCBC(string inputPath, string outputPath, byte[] key)
 {
     byte[] fileBytes = File.ReadAllBytes(inputPath);
@@ -323,6 +383,64 @@ public class AESFileManual
     File.WriteAllBytes(outputPath, finalData);
 
     Console.WriteLine("✔ Encrypt CBC xong!");
+    return finalData;
+}
+
+public static byte[] EncryptFileCBCWithHeader(string inputPath, string outputPath, byte[] key)
+{
+    // --- BƯỚC 0: CHUẨN BỊ HEADER (ĐỊNH DẠNG FILE) ---
+    string extension = Path.GetExtension(inputPath); // Lấy ".png", ".docx",...
+    byte[] extBytes = System.Text.Encoding.UTF8.GetBytes(extension);
+    byte[] extLength = BitConverter.GetBytes(extBytes.Length); // 4 byte độ dài
+
+    // --- BƯỚC 1: ĐỌC VÀ PADDING ---
+    byte[] fileBytes = File.ReadAllBytes(inputPath);
+    int paddingLength = 16 - (fileBytes.Length % 16);
+    byte[] paddedBytes = new byte[fileBytes.Length + paddingLength];
+    Array.Copy(fileBytes, paddedBytes, fileBytes.Length);
+
+    for (int i = fileBytes.Length; i < paddedBytes.Length; i++)
+        paddedBytes[i] = (byte)paddingLength;
+
+    // --- BƯỚC 2: TẠO IV (16 BYTE) ---
+    byte[] iv = new byte[16];
+    using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+    {
+        rng.GetBytes(iv);
+    }
+
+    // --- BƯỚC 3: MÃ HÓA CBC ---
+    byte[] encryptedData = new byte[paddedBytes.Length];
+    byte[] previousBlock = iv;
+
+    for (int i = 0; i < paddedBytes.Length; i += 16)
+    {
+        byte[] block = new byte[16];
+        Array.Copy(paddedBytes, i, block, 0, 16);
+
+        // XOR với block trước (CBC mode)
+        for (int j = 0; j < 16; j++)
+            block[j] ^= previousBlock[j];
+
+        byte[] encryptedBlock = AESEncryption.Encrypt2(block, key);
+        Array.Copy(encryptedBlock, 0, encryptedData, i, 16);
+        previousBlock = encryptedBlock;
+    }
+
+    // --- BƯỚC 4: GHÉP TẤT CẢ LẠI ĐỂ GHI FILE ---
+    // Cấu trúc: [Độ dài Ext (4B)] + [Ext (NB)] + [IV (16B)] + [Cipher (MB)]
+    int totalSize = 4 + extBytes.Length + 16 + encryptedData.Length;
+    byte[] finalData = new byte[totalSize];
+
+    int currentPos = 0;
+    Array.Copy(extLength, 0, finalData, currentPos, 4); currentPos += 4;
+    Array.Copy(extBytes, 0, finalData, currentPos, extBytes.Length); currentPos += extBytes.Length;
+    Array.Copy(iv, 0, finalData, currentPos, 16); currentPos += 16;
+    Array.Copy(encryptedData, 0, finalData, currentPos, encryptedData.Length);
+
+    File.WriteAllBytes(outputPath, finalData);
+
+    Console.WriteLine($"✔ Đã mã hóa xong file {extension}!");
     return finalData;
 }
 }

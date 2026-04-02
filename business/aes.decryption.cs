@@ -156,60 +156,6 @@ public class AESDecryption
 
 public class AESFileDecryptor
 {
-    public static void DecryptFileManual(string inputPath, string outputPath, byte[] key)
-    {
-        // 1. Đọc toàn bộ dữ liệu đã mã hóa từ file
-        byte[] encryptedData = File.ReadAllBytes(inputPath);
-
-        // Kiểm tra xem dữ liệu có phải là bội số của 16 không
-        if (encryptedData.Length % 16 != 0)
-        {
-            throw new Exception("Dữ liệu mã hóa không hợp lệ (không chia hết cho 16).");
-        }
-
-        List<byte> decryptedList = new List<byte>();
-
-        // 2. Giải mã từng khối 16 byte
-        for (int i = 0; i < encryptedData.Length; i += 16)
-        {
-            byte[] block = new byte[16];
-            Array.Copy(encryptedData, i, block, 0, 16);
-
-            // Gọi hàm giải mã "chay" đã viết ở bước trước
-            byte[] decryptedBlock = AESDecryption.Decrypt2(block, key);
-            Console.WriteLine("giai ma " + System.Text.Encoding.UTF8.GetString(decryptedBlock));
-            string hexResult = BitConverter.ToString(decryptedBlock).Replace("-", " ");
-            Console.WriteLine("Bản gia ma (HEX): " + hexResult);
-            // 4. In dang Base64 (de truyen di xa neu can)
-            string base64Result = Convert.ToBase64String(decryptedBlock);
-            Console.WriteLine($"Ban ma (Base64): {base64Result}");
-            decryptedList.AddRange(decryptedBlock);
-        }
-
-        byte[] decryptedData = decryptedList.ToArray();
-
-        // 3. Loại bỏ Padding (PKCS7)
-        // Giá trị của byte cuối cùng chính là số lượng byte đã được bù vào
-        int paddingLength = decryptedData[decryptedData.Length - 1];
-
-        // Kiểm tra tính hợp lệ của padding để tránh lỗi
-        if (paddingLength <= 0 || paddingLength > 16)
-        {
-            throw new Exception("Lỗi giải mã: Padding không hợp lệ. Có thể sai khóa?");
-        }
-
-        int finalLength = decryptedData.Length - paddingLength;
-        byte[] finalResult = new byte[finalLength];
-        Array.Copy(decryptedData, finalResult, finalLength);
-
-        // 4. Ghi dữ liệu sạch ra file
-        //    File.WriteAllBytes(outputPath, finalResult);
-
-        Console.WriteLine($"--- GIẢI MÃ FILE THÀNH CÔNG ---");
-        Console.WriteLine($"File gốc: {inputPath}");
-        Console.WriteLine($"File đầu ra: {outputPath}");
-        Console.WriteLine($"Kích thước sau khi loại bỏ padding: {finalLength} bytes");
-    }
 
     public static byte[] DecryptDataManual(byte[] encryptedData, byte[] key)
     {
@@ -254,61 +200,147 @@ public class AESFileDecryptor
             return finalResult; // Trả về mảng byte "sạch"
         }
     }
-
- public static byte[] DecryptDataCBC(byte[] encryptedData, byte[] key)
+public static void DecryptDataManualWithHeader(byte[] allDataFromFile, byte[] key)
 {
-    // 1. Kiểm tra dữ liệu
-    if (encryptedData == null || encryptedData.Length < 16 || encryptedData.Length % 16 != 0)
+    // 1. Kiểm tra tính hợp lệ tối thiểu (ít nhất phải có 4 byte độ dài + 1 byte ext + 16 byte cipher)
+    if (allDataFromFile == null || allDataFromFile.Length < 21)
     {
-        throw new Exception("Dữ liệu mã hóa không hợp lệ.");
+        throw new Exception("Dữ liệu file không hợp lệ hoặc quá ngắn.");
     }
 
-    // 2. Tách IV (16 byte đầu)
+    int currentPos = 0;
+
+    // --- BƯỚC A: ĐỌC HEADER ĐỂ LẤY ĐỊNH DẠNG ---
+    // Đọc 4 byte đầu để lấy độ dài extension
+    int extLen = BitConverter.ToInt32(allDataFromFile, currentPos);
+    currentPos += 4;
+
+    // Đọc chuỗi extension thực tế (.png, .docx, .txt...)
+    byte[] extBytes = new byte[extLen];
+    Array.Copy(allDataFromFile, currentPos, extBytes, 0, extLen);
+    currentPos += extLen;
+    string fileExtension = System.Text.Encoding.UTF8.GetString(extBytes);
+
+    // TẠO OUTPUTPATH TRONG HÀM
+    string outputPath = "D:\\TTCS\\decrypted_file_" + DateTime.Now.Ticks + fileExtension;
+
+    // --- BƯỚC B: GIẢI MÃ ECB ---
+    using (MemoryStream ms = new MemoryStream())
+    {
+        // Duyệt từ vị trí sau Header đến hết mảng dữ liệu
+        // Dữ liệu mã hóa ECB luôn phải là bội số của 16
+        for (int i = currentPos; i < allDataFromFile.Length; i += 16)
+        {
+            byte[] block = new byte[16];
+            Array.Copy(allDataFromFile, i, block, 0, 16);
+
+            // Gọi hàm giải mã lõi (AES "chay")
+            byte[] decryptedBlock = AESDecryption.Decrypt2(block, key);
+
+            ms.Write(decryptedBlock, 0, decryptedBlock.Length);
+        }
+
+        byte[] decryptedData = ms.ToArray();
+
+        // --- BƯỚC C: XỬ LÝ LOẠI BỎ PADDING (PKCS7) ---
+        if (decryptedData.Length == 0) throw new Exception("Không có dữ liệu để giải mã.");
+        
+        int paddingLength = decryptedData[decryptedData.Length - 1];
+
+        // Kiểm tra logic padding
+        if (paddingLength <= 0 || paddingLength > 16)
+        {
+            throw new Exception("Lỗi giải mã: Padding không hợp lệ (Có thể sai Key hoặc dữ liệu bị lỗi).");
+        }
+
+        // Tạo mảng kết quả cuối cùng đã cắt bỏ padding
+        int finalLength = decryptedData.Length - paddingLength;
+        byte[] finalResult = new byte[finalLength];
+        Array.Copy(decryptedData, finalResult, finalLength);
+
+        // --- BƯỚC D: GHI FILE DỮ LIỆU SẠCH ---
+        File.WriteAllBytes(outputPath, finalResult);
+
+        Console.WriteLine($"--- GIẢI MÃ ECB THÀNH CÔNG ---");
+        Console.WriteLine($"Định dạng file: {fileExtension}");
+        Console.WriteLine($"File đã lưu tại: {outputPath}");
+    }
+}
+public static void DecryptDataCBCToFile(byte[] allDataFromFile, byte[] key)
+{
+    // 1. Kiểm tra tính hợp lệ tối thiểu (Header 4B + Ext + IV 16B + Cipher 16B)
+    if (allDataFromFile == null || allDataFromFile.Length < 40)
+    {
+        throw new Exception("Dữ liệu file không đủ cấu trúc Header + IV + Cipher.");
+    }
+
+    int currentPos = 0;
+
+    // --- BƯỚC A: ĐỌC HEADER ĐỂ LẤY ĐỊNH DẠNG ---
+    // Đọc 4 byte đầu để biết độ dài chuỗi extension (ví dụ: .png là 4)
+    int extLen = BitConverter.ToInt32(allDataFromFile, currentPos);
+    currentPos += 4;
+
+    // Đọc chuỗi extension thực tế
+    byte[] extBytes = new byte[extLen];
+    Array.Copy(allDataFromFile, currentPos, extBytes, 0, extLen);
+    currentPos += extLen;
+    string fileExtension = System.Text.Encoding.UTF8.GetString(extBytes);
+
+    // TẠO OUTPUTPATH TRONG HÀM (Theo yêu cầu của bạn)
+    // Tên file sẽ có dạng: decryptfile_638472... .png
+    string outputPath = "D:\\TTCS\\decrypted_file_" + DateTime.Now.Ticks + fileExtension;
+
+    // --- BƯỚC B: TÁCH IV (16 byte tiếp theo) ---
     byte[] iv = new byte[16];
-    Array.Copy(encryptedData, 0, iv, 0, 16);
+    Array.Copy(allDataFromFile, currentPos, iv, 0, 16);
+    currentPos += 16;
 
-    int cipherLength = encryptedData.Length - 16;
-
+    // --- BƯỚC C: GIẢI MÃ CBC ---
     using (MemoryStream ms = new MemoryStream())
     {
         byte[] previousBlock = iv;
 
-        // 3. Giải mã từng block
-        for (int i = 16; i < encryptedData.Length; i += 16)
+        // Chạy từ vị trí hiện tại đến hết file
+        for (int i = currentPos; i < allDataFromFile.Length; i += 16)
         {
             byte[] block = new byte[16];
-            Array.Copy(encryptedData, i, block, 0, 16);
+            Array.Copy(allDataFromFile, i, block, 0, 16);
 
-            // AES decrypt core
+            // Giải mã lõi AES
             byte[] decryptedBlock = AESDecryption.Decrypt2(block, key);
 
-            // 🔥 XOR với block trước (CBC)
+            // XOR với block mã hóa trước đó
             for (int j = 0; j < 16; j++)
             {
                 decryptedBlock[j] ^= previousBlock[j];
             }
 
             ms.Write(decryptedBlock, 0, 16);
-
-            // 🔥 cập nhật (rất quan trọng)
-            previousBlock = block;
+            previousBlock = block; // Cập nhật cho vòng lặp sau
         }
 
-        byte[] decryptedData = ms.ToArray();
+        // --- BƯỚC D: XỬ LÝ PADDING PKCS7 ---
+        byte[] decryptedDataFull = ms.ToArray();
+        if (decryptedDataFull.Length == 0) throw new Exception("Lỗi: Dữ liệu giải mã trống.");
 
-        // 4. Remove PKCS7 padding
-        int paddingLength = decryptedData[decryptedData.Length - 1];
+        int paddingLength = decryptedDataFull[decryptedDataFull.Length - 1];
 
         if (paddingLength <= 0 || paddingLength > 16)
         {
-            throw new Exception("Padding không hợp lệ (sai key hoặc dữ liệu lỗi).");
+            throw new Exception("Lỗi: Padding không hợp lệ. Có thể sai Key hoặc file hỏng.");
         }
 
-        int finalLength = decryptedData.Length - paddingLength;
+        int finalLength = decryptedDataFull.Length - paddingLength;
         byte[] finalResult = new byte[finalLength];
-        Array.Copy(decryptedData, finalResult, finalLength);
+        Array.Copy(decryptedDataFull, finalResult, finalLength);
 
-        return finalResult;
+        // --- BƯỚC E: GHI RA FILE ---
+        File.WriteAllBytes(outputPath, finalResult);
+        
+        Console.WriteLine($"--- GIẢI MÃ THÀNH CÔNG ---");
+        Console.WriteLine($"Định dạng nhận diện: {fileExtension}");
+        Console.WriteLine($"File đã lưu: {outputPath}");
     }
 }
 }
