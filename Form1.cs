@@ -311,11 +311,13 @@ public partial class Form1 : Form
                 return;
             }
 
-            /*if (key.Length != 16)
-            {
-                MessageBox.Show("Key phải là 16 ký tự cho AES-128!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }*/
+           if (key.Length != 16 && key.Length != 24 && key.Length != 32)
+{
+    MessageBox.Show($"Độ dài key hiện tại là {key.Length} bytes.\n" +
+                    "Key phải dài đúng 16, 24, hoặc 32 bytes (tương đương 16, 24, 32 ký tự Latin không dấu)!", 
+                    "Lỗi định dạng Key", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    return;
+}
 
             if (!int.TryParse(portStr, out int port))
             {
@@ -409,11 +411,13 @@ public partial class Form1 : Form
                 return;
             }
 
-            if (txtKeyServer.Text.Length == 0 || txtKeyServer.Text.Length > 32)
-            {
-                MessageBox.Show("Key phải là chuỗi đúng định dạng", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+            if (txtKeyServer.Text.Length != 16 && txtKeyServer.Text.Length != 24 && txtKeyServer.Text.Length != 32)
+{
+    MessageBox.Show($"Độ dài key hiện tại là {txtKeyServer.Text.Length} bytes.\n" +
+                    "Key phải dài đúng 16, 24, hoặc 32 bytes (tương đương 16, 24, 32 ký tự Latin không dấu)!", 
+                    "Lỗi định dạng Key", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    return;
+}
 
             btnStartServer.Enabled = false;
             btnStopServer.Enabled = true;
